@@ -1,0 +1,1224 @@
+---
+title: "R Project 4. CRYPTO CURRENCY VS TRADITIONAL FINANCE"
+output:
+  html_document:
+    df_print: paged
+---
+Project 4
+
+```{r message=FALSE, warning=TRUE}
+rm(list = ls(all=TRUE))
+
+```
+
+Step 1:
+Clear the Environment
+
+```{r message=TRUE}
+library (xts)
+library (zoo)
+library (PerformanceAnalytics)
+require (sandwich)
+require(lmtest)
+library(dplyr)
+library(tidyquant)
+library(quantmod)
+library(pastecs)
+require (tvReg)
+library (MSwM)
+library (quantreg)
+library (fBasics)
+library(car)
+library(moments)
+library(ggplot2)
+library(corrplot)
+library(reshape2)
+library(vars)
+library(readxl)
+library (psych) 
+library (GPArotation)
+library(rugarch)
+```
+
+Step 2:
+Load the Required Packages
+
+```{r}
+options("getSymbols.warning4.0"=TRUE)
+options("getSymbols.yahoo.warning"=TRUE)
+getSymbols(c("AAPL","GLD","BAC","GS","JPM","BTC-USD","ETH-USD","BNB-USD","XRP-USD","ADA-USD"), from = '2018-01-01',
+           to = "2023-01-01",warnings = FALSE,
+           auto.assign = TRUE) 
+```
+
+
+Step 3:
+
+Selection of the portfolio (50% crypto | 50% Traditional instruments)
+
+For this analysis, data was sourced from Yahoo finance from the time duration 2018-01-01 to 2023-01-01. 
+
+Selection of crypto : 5 Cryptos with the largest market cap were selected (Stable coins were excluded)
+
+Selection of Stocks: Apple (Tech), SDPR GOLD SHARE ETF (Commodity based etf) and three financial stocks were selected.(Bank of America, JP Morgan and Gold Man Sachs)
+
+Reason: The reason behind this selection was to understand crypto and its relation with other instruments, Crypto (Specifically BTC) is often considered competitor of GOLD as value storage reserve, it also has a very strong tech industry related aspect to it and is also a competition in some sense to traditional financial institutions. Hence, traditional stocks covering all these 3 aspects were considered. 
+
+
+```{r}
+## Easily usable names
+BTC_USD= `BTC-USD`
+colnames(BTC_USD)<- c("BTC_USD.Open","BTC_USD.High","BTC_USD.Low","BTC_USD.Close","BTC_USD.Volume","BTC_USD.Adjusted")
+ETH_USD= `ETH-USD`
+colnames(ETH_USD)<- c("ETH_USD.Open","ETH_USD.High","ETH_USD.Low","ETH_USD.Close","ETH_USD.Volume","ETH_USD.Adjusted")
+BNB_USD= `BNB-USD`
+colnames(BNB_USD)<- c("BNB_USD.Open","BNB_USD.High","BNB_USD.Low","BNB_USD.Close","BNB_USD.Volume","BNB_USD.Adjusted")
+XRP_USD= `XRP-USD`
+colnames(XRP_USD)<- c("XRP_USD.Open","XRP_USD.High","XRP_USD.Low","XRP_USD.Close","XRP_USD.Volume","XRP_USD.Adjusted")
+ADA_USD= `ADA-USD`
+colnames(ADA_USD)<- c("ADA_USD.Open","ADA_USD.High","ADA_USD.Low","ADA_USD.Close","ADA_USD.Volume","ADA_USD.Adjusted")
+
+
+symbol_names <- c("AAPL","GLD","BAC","GS","JPM","BTC_USD","ETH_USD","BNB_USD","XRP_USD","ADA_USD")
+
+stock_names <- c("Apple Inc.", "SDPR GOLD SHARES", "Bank of America Corporation", "The Goldman Sachs Group Inc.", "JPMorgan Chace & Co", "Bitcoin USD", "Ethereum USD", "BNB USD", "Ripple USD", "CARDANO USD")
+
+```
+
+Step 4:
+
+The original symbol of cryptos from Yahoo finance use a (-) in them which R doesn't let you use without (`), to make it easy the names were changed in the above code and finally the symbols of instruments were stored in the vector symbol_names and the full names were stored in stock_names. 
+
+```{r}
+#Bringing all instruments on similar time frames (Weekdays)
+
+#For BTC_USD
+BTC_USD= BTC_USD[.indexwday(BTC_USD) %in% 1:5]
+together_BTC_USD =  merge(AAPL,BTC_USD, all=FALSE)
+BTC_USD=subset(together_BTC_USD, select = c('BTC_USD.Open','BTC_USD.High','BTC_USD.Low','BTC_USD.Close','BTC_USD.Volume','BTC_USD.Adjusted'))
+
+#For ETH_USD
+ETH_USD= ETH_USD[.indexwday(ETH_USD) %in% 1:5]
+together_ETH_USD =  merge(AAPL,ETH_USD, all=FALSE)
+ETH_USD=subset(together_ETH_USD, select = c('ETH_USD.Open','ETH_USD.High','ETH_USD.Low','ETH_USD.Close','ETH_USD.Volume','ETH_USD.Adjusted'))
+
+#For BNB_USD
+BNB_USD= BNB_USD[.indexwday(BNB_USD) %in% 1:5]
+together_BNB_USD =  merge(AAPL,BNB_USD, all=FALSE)
+BNB_USD=subset(together_BNB_USD, select = c('BNB_USD.Open','BNB_USD.High','BNB_USD.Low','BNB_USD.Close','BNB_USD.Volume','BNB_USD.Adjusted'))
+
+#For XRP_USD
+XRP_USD= XRP_USD[.indexwday(XRP_USD) %in% 1:5]
+together_XRP_USD =  merge(AAPL,XRP_USD, all=FALSE)
+XRP_USD=subset(together_XRP_USD, select = c('XRP_USD.Open','XRP_USD.High','XRP_USD.Low','XRP_USD.Close','XRP_USD.Volume','XRP_USD.Adjusted'))
+
+#For ADA_USD
+ADA_USD= ADA_USD[.indexwday(ADA_USD) %in% 1:5]
+together_ADA_USD =  merge(AAPL,ADA_USD, all=FALSE)
+ADA_USD=subset(together_ADA_USD, select = c('ADA_USD.Open','ADA_USD.High','ADA_USD.Low','ADA_USD.Close','ADA_USD.Volume','ADA_USD.Adjusted'))
+
+
+close_prices <- data.frame(AAPL$AAPL.Close, GLD$GLD.Close, BAC$BAC.Close, GS$GS.Close, JPM$JPM.Close,
+                           BTC_USD$BTC_USD.Close, ETH_USD$ETH_USD.Close, BNB_USD$BNB_USD.Close,
+                           XRP_USD$XRP_USD.Close, ADA_USD$ADA_USD.Close)
+
+```
+
+Step 5:
+
+Cryptos are traded on all the 7 days of the week whereas stocks are traded only for 5 days and markets are often closed. Using the stock APPL as refernce, the above code changes Cryptos timeline comparable to normal stocks on the US market. 
+
+Then the close prices of all the instruments are stored in a data frame close_prices for further use. 
+
+
+```{r}
+#finding log returns
+
+AAPL_return <- diff(log(AAPL$AAPL.Close))[-1]
+GLD_return <- diff(log(GLD$GLD.Close))[-1]
+BAC_return <- diff(log(BAC$BAC.Close))[-1]
+GS_return <- diff(log(GS$GS.Close))[-1]
+JPM_return <- diff(log(JPM$JPM.Close))[-1]
+BTC_USD_return <- diff(log(BTC_USD$BTC_USD.Close))[-1]
+ETH_USD_return <- diff(log(ETH_USD$ETH_USD.Close))[-1]
+BNB_USD_return <- diff(log(BNB_USD$BNB_USD.Close))[-1]
+XRP_USD_return <- diff(log(XRP_USD$XRP_USD.Close))[-1]
+ADA_USD_return <- diff(log(ADA_USD$ADA_USD.Close))[-1]
+
+returns <- data.frame(AAPL_return, GLD_return, BAC_return, GS_return, JPM_return, 
+                      BTC_USD_return, ETH_USD_return, BNB_USD_return, XRP_USD_return, ADA_USD_return)
+
+```
+
+Step 6:
+Then we calculate the log returns for easier calculation and interpretability. 
+
+Secondly store the returns into a dataframe returns, for further use.
+
+```{r}
+#### Testing Normality
+
+# Kolmogorov Smirnov
+
+ks1 <- ks.test(AAPL_return, "pnorm")
+ks2 <- ks.test(GLD_return, "pnorm")
+ks3 <- ks.test(BAC_return, "pnorm")
+ks4 <- ks.test(GS_return, "pnorm")
+ks5 <- ks.test(JPM_return, "pnorm")
+ks6 <- ks.test(BTC_USD_return, "pnorm")
+ks7 <- ks.test(ETH_USD_return, "pnorm")
+ks8 <- ks.test(BNB_USD_return, "pnorm")
+ks9 <- ks.test(XRP_USD_return, "pnorm")
+ks10 <- ks.test(ADA_USD_return, "pnorm")
+ks10
+p_value_ks <- c(ks1$p.value, ks2$p.value, ks3$p.value, ks4$p.value, ks5$p.value,
+                ks6$p.value, ks7$p.value, ks8$p.value, ks9$p.value, ks10$p.value)
+
+symbol_names <- c("AAPL", "GLD", "BAC", "GS", "JPM", "BTC_USD", "ETH_USD", "BNB_USD", "XRP_USD", "ADA_USD")
+kolomogorov_df <- data.frame(Symbol = symbol_names, P_Value = p_value_ks)
+kolomogorov_df
+
+
+```
+
+
+Step 7: TESTING FOR NORMALITY (Test 1 out of 3)
+
+Kolmogorov Smirnov Test
+In the above code test to check normality. To make the results easily readable all the p values of the test results are inserted into a dataframe. 
+
+Result: All the p values are zero (They actually were 2.2e-16, but as it is a very small number it appears as 0). This indicates that the null hypothesis (Data is normal) can be rejected. Hence, this test indicates that the data is not normal. 
+
+```{r}
+###Bonnet-Seier test
+bnt1 <- bonett.test(AAPL_return, alternative = "two.sided")
+bnt2 <- bonett.test(GLD_return, alternative = "two.sided")
+bnt3 <- bonett.test(BAC_return, alternative = "two.sided")
+bnt4 <- bonett.test(GS_return, alternative = "two.sided")
+bnt5 <- bonett.test(JPM_return, alternative = "two.sided")
+bnt6 <- bonett.test(BTC_USD_return, alternative = "two.sided")
+bnt7 <- bonett.test(ETH_USD_return, alternative = "two.sided")
+bnt8 <- bonett.test(BNB_USD_return, alternative = "two.sided")
+bnt9 <- bonett.test(XRP_USD_return, alternative = "two.sided")
+bnt10 <- bonett.test(ADA_USD_return, alternative = "two.sided")
+
+p_value_bonett <- c(bnt1$p.value, bnt2$p.value, bnt3$p.value, bnt4$p.value, bnt5$p.value,
+                    bnt6$p.value, bnt7$p.value, bnt8$p.value, bnt9$p.value, bnt10$p.value)
+
+bonett_df <- data.frame(Symbol = symbol_names, P_Value = p_value_bonett)
+bonett_df$Significance_from_normal <- ifelse(bonett_df$P_Value < 0.05, "Significant", "Not Significant")
+
+bonett_df
+```
+
+Step 8: TESTING FOR NORMALITY (Test 2 out of 3)
+
+Bonnet Seier Test
+We have used another test to check normality, this test basically checks if the sample data exhibits Geary's measure of kurtosis in excess of normal distribution.
+
+Null Hypothesis: It does not exhibit excess Geary's measure of kurtosis relative to normal distribution
+
+We have put all the p values in a dataframe which can be seen above for easy interpretability, it can be seen that all the p values are significant, indicating that the null hypothesis is rejected and the excess Geary measure of kurtosis is not like the normal distribution. 
+
+This further supports the results from the first test that the data is not normal. 
+
+```{r}
+# JARQUE-BERA TEST
+
+jqb1 <- jarqueberaTest(AAPL_return)
+jqb2 <- jarqueberaTest(GLD_return)
+jqb3 <- jarqueberaTest(BAC_return)
+jqb4 <- jarqueberaTest(GS_return)
+jqb5 <- jarqueberaTest(JPM_return)
+jqb6 <- jarqueberaTest(BTC_USD_return)
+jqb7 <- jarqueberaTest(ETH_USD_return)
+jqb8 <- jarqueberaTest(BNB_USD_return)
+jqb9 <- jarqueberaTest(XRP_USD_return)
+jqb10 <- jarqueberaTest(ADA_USD_return)
+
+p_value_jqb <- c(jqb1@test$p.value, jqb2@test$p.value, jqb3@test$p.value, jqb4@test$p.value, jqb5@test$p.value, 
+                 jqb6@test$p.value, jqb7@test$p.value, jqb8@test$p.value, jqb9@test$p.value, jqb10@test$p.value)
+p_value_jqb
+```
+
+
+Step 9: TESTING FOR NORMALITY (Test 3 out of 3)
+
+JARQUE-BERA TEST
+
+This test basically checks if the data we have is a sample from a normal distribution.
+
+Null Hypothesis: Sample data comes from a normal distribution
+
+The p value results can be seen in the vector p_value_jqb, it can be seen that all the values are 0 which means that the null hypothesis is rejected and the sample data doesn't come from a normal distribtuion. The p values actually were 2.2e-16, but this is so small that it appears as 0 in the vector. 
+
+```{r warning=FALSE}
+###Correlation
+#Spearman rank correlation test
+
+# Calculate correlation matrix and p-value matrix using Spearman method
+n <- ncol(returns)
+cor_matrix_spearman <- matrix(NA, nrow=n, ncol=n)
+pvalue_matrix_spearman <- matrix(NA, nrow=n, ncol=n)
+
+for (i in 1:n) {
+  for (j in 1:n) {
+    cor_test_spearman <- cor.test(returns[, i], returns[, j], method = "spearman")
+    cor_matrix_spearman[i, j] <- cor_test_spearman$estimate
+    pvalue_matrix_spearman[i, j] <- cor_test_spearman$p.value
+  }
+}
+
+
+# Add stock names to matrices
+rownames(cor_matrix_spearman) <- colnames(cor_matrix_spearman) <- colnames(returns)
+rownames(pvalue_matrix_spearman) <- colnames(pvalue_matrix_spearman) <- colnames(returns)
+
+# Prepare data for plotting
+cor_melted_spearman <- melt(cor_matrix_spearman)
+pvalue_melted_spearman <- melt(pvalue_matrix_spearman)
+
+colnames(cor_melted_spearman) <- colnames(pvalue_melted_spearman) <- c("Var1", "Var2", "value")
+
+
+# Create the heatmap for the p-value matrix
+pvalue_plot_spearman <- ggplot(data = pvalue_melted_spearman, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  geom_text(aes(label = round(value, 2)), size = 3, fontface = "bold") +
+  ggtitle("P-value Matrix for Spearman's Rank Correlation") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+print(pvalue_plot_spearman)
+
+# Create the heatmap for the correlation matrix
+correlation_plot_spearman <- ggplot(data = cor_melted_spearman, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  geom_text(aes(label = round(value, 2)), size = 3, fontface = "bold") +
+  ggtitle("Spearman's Rank Correlation Matrix") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+print(correlation_plot_spearman)
+```
+Step 10: TESTING CORRELATION (Test 1 out of 2)
+
+SPEARMAN RANK CORRELATION TEST.
+
+As our log returns are continuous data and our data is not normal we can use this test for correlation over here. 
+
+In the code above we have created two heat maps of correlation values and p values relevant to those correlation values of all the possible pairs in our 10 instruments. 
+
+Crypto to Crypto Relations.
+
+P values: All are significant, hence null hypothesis that there is no correlation is rejected.
+
+Correlation: All cryptos have a strong correlation with each other, even the least correlation value is 0.62 (between XRP and BNB), which is also pretty high. This is because even after more than a decade the crypto market behaviour has largely been dependent on BTC, so if an overall analysis is done of longer time periods it would be seen that the entire market kind of moves with BTC, hence the correlations are high. 
+
+
+Stocks to Stocks Correlation.
+
+P values: All stocks have significant p values indicating a correlation except with GLD which is an ETF based on GOLD prices. This indicates that all of our stocks don't have much correlation with gold prices.
+
+Correlation: All the finance stocks have a high correlation with each other, which was  expected given that they are from the same industry. Their relation with our tech stock AAPL is moderately positive. 
+
+Stocks to Crypto
+
+P values: All p values of stocks and Gold stock with crypto are significant.
+
+Correlation: The correlation is although very low. The highest correlation being between Apple and the cryptos. This shows that crypto although being a financial asset has more relation with a tech stock rather than financial stocks.
+
+```{r}
+#### Kendall's tau method
+n <- ncol(returns)
+cor_matrix_tau <- matrix(NA, nrow=n, ncol=n)
+pvalue_matrix_tau <- matrix(NA, nrow=n, ncol=n)
+
+for (i in 1:n) {
+  for (j in 1:n) {
+    cor_test_tau <- cor.test(returns[, i], returns[, j], method = "kendall")
+    cor_matrix_tau[i, j] <- cor_test_tau$estimate
+    pvalue_matrix_tau[i, j] <- cor_test_tau$p.value
+  }
+}
+
+
+# Add stock names to matrices
+rownames(cor_matrix_tau) <- colnames(cor_matrix_tau) <- colnames(returns)
+rownames(pvalue_matrix_tau) <- colnames(pvalue_matrix_tau) <- colnames(returns)
+
+# Prepare data for plotting
+cor_melted_tau <- melt(cor_matrix_tau)
+pvalue_melted_tau <- melt(pvalue_matrix_tau)
+
+colnames(cor_melted_tau) <- colnames(pvalue_melted_tau) <- c("Var1", "Var2", "value")
+
+# Create the heatmap for the correlation matrix
+correlation_plot_tau <- ggplot(data = cor_melted_tau, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  geom_text(aes(label = round(value, 2)), size = 3, fontface = "bold") +
+  ggtitle("Kendall's Tau Correlation Matrix") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Create the heatmap for the p-value matrix
+pvalue_plot_tau <- ggplot(data = pvalue_melted_tau, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  geom_text(aes(label = round(value, 2)), size = 3, fontface = "bold") +
+  ggtitle("P-value Matrix for Kendall's Tau Correlation") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Display the plots
+print(correlation_plot_tau)
+print(pvalue_plot_tau)
+
+
+```
+
+
+STEP 11: TESTING CORRELATION (Test 2 out of 2)
+
+Kendal Tau's method
+
+We use another test to further check our results, as our data is non normal and is continuous we can use the Kendal Tau's method for testing correlation.
+
+P-Values: The same pairs are significant as were in the Spearman Rank test, showing that the results are similar as far as significance is concerned. 
+
+Correlation: The coefficients relatively are the same as the Spearman Rank test but the magnitude as compared to Spearman Rank is a bit less. But it indicates the same result as far as the relation of one instrument with the other is concerned. 
+
+
+```{r}
+###GRANGER CAUSALITY
+n <- ncol(returns)
+n
+var_names <- colnames(returns)
+causal_matrix <- matrix(NA, nrow=n, ncol=n)
+causal_matrix
+rownames(causal_matrix) <- var_names
+colnames(causal_matrix) <- var_names
+
+
+causal_matrix <- matrix(NA, nrow = length(var_names), ncol = length(var_names),
+                        dimnames = list(var_names, var_names))
+
+# Perform Granger causality test for each pair of variables
+for (i in var_names) {
+  for (j in var_names) {
+    if (i != j) {
+      formula <- paste(j, "~", i)
+      result <- grangertest(as.formula(formula), data = returns, order = 1)
+      result_clean <- na.omit(result$`Pr(>F)`)
+      print(result_clean)
+      causal_matrix[i, j] <-result_clean
+    }
+  }
+}
+
+
+# Create a new matrix to store the significant results
+sig_matrix <- causal_matrix
+
+# Replace p-values with "Sig." or "Not Sig."
+sig_matrix[causal_matrix < 0.05] <- "Sig."
+sig_matrix[causal_matrix >= 0.05] <- "Not Sig."
+
+# View the results
+sig_matrix
+sig_indices <- which(causal_matrix < 0.05, arr.ind = TRUE)
+
+# Get the corresponding variable names
+sig_pairs <- data.frame(source = rownames(causal_matrix)[sig_indices[, 1]],
+                        target = colnames(causal_matrix)[sig_indices[, 2]])
+
+# View the significant pairs
+sig_pairs
+
+# Create the causal matrix
+f_matrix <- matrix(NA, nrow = length(var_names), ncol = length(var_names),
+                   dimnames = list(var_names, var_names))
+
+# Perform Granger causality test for each pair of variables
+for (i in var_names) {
+  for (j in var_names) {
+    if (i != j) {
+      formula <- paste(j, "~", i)
+      result <- grangertest(as.formula(formula), data = returns, order = 1)
+      result_clean <- na.omit(result$F)
+      print(result_clean)
+      f_matrix[i, j] <- result_clean
+    }
+  }
+}
+f_matrix
+# Create the causal matrix
+f_matrix <- matrix(NA, nrow = length(var_names), ncol = length(var_names),
+                   dimnames = list(var_names, var_names))
+
+# Perform Granger causality test for each pair of variables in sig_pairs only
+for (i in 1:nrow(sig_pairs)) {
+  formula <- paste(sig_pairs$target[i], "~", sig_pairs$source[i])
+  result <- grangertest(as.formula(formula), data = returns, order = 1)
+  result_clean <- na.omit(result$F)
+  sig_pairs$f_statistic[i] <- result_clean
+  f_matrix[sig_pairs$source[i], sig_pairs$target[i]] <- result_clean
+}
+
+sig_pairs
+```
+
+STEP 12: TESTING FOR CAUSALITY (TEST 1 out of 2)
+
+Granger Causality Test
+This test checks if the returns of a certain instrument are based on the past returns of another instrument. 
+
+In the above code, we have checked the causality of closing prices of all possible pairs of our instruments. To have the results in an interpret able form, it can be seen that we made a data frame with the source and target variable (To see which is effecting which), all these pairs in this data frame had significant p values and the f statistic is given in the third column.
+
+Interpreting: Although there are 17 significant pairs of causality, the interesting points are that the only traditional instrument that causes the close prices in crypto is Apple causing close prices of XRP, other than that cryptos closing prices are not caused by other traditional stocks. 
+
+But within cryptos a strong causality can be seen from certain cryptos to other cryptos. 
+
+The GOLD etf again stands different, with it causing none and no other instrument causing it. 
+
+```{r}
+##### Causality based on Variance
+
+max_lags = 10
+granger_matrix <- matrix(NA, nrow = length(var_names), ncol = length(var_names),
+                         dimnames = list(var_names, var_names))
+instant_matrix <- matrix(NA, nrow = length(var_names), ncol = length(var_names),
+                         dimnames = list(var_names, var_names))
+
+
+for (i in var_names) {
+  for (j in var_names) {
+    if (i != j) {
+      cause_var <- i
+      effect_var <- j
+      # Subset the data for the pair of columns
+      subset_data <- returns[, c(cause_var, effect_var)]
+      lag_selection = VARselect(subset_data, lag.max = max_lags, type = "both")
+      
+      optimal_lag_aic = lag_selection$selection["AIC(n)"]
+      optimal_lag_bic = lag_selection$selection["SC(n)"]
+      
+      # Estimate the VAR model with the optimal lag order
+      model_aic = VAR(subset_data, p = optimal_lag_aic)
+      model_bic = VAR(subset_data, p = optimal_lag_bic)
+      
+      # Perform causality test
+      causality_test <- causality(model_aic, cause = cause_var)
+      causality_granger_pvalue<- causality_test$Granger$p.value
+      causality_instantaneous_pvalue<- causality_test$Instant$p.value
+      granger_matrix[i, j] <-causality_granger_pvalue
+      instant_matrix[i, j] <-causality_instantaneous_pvalue
+      
+      
+      # Print the causality test results
+      print(causality_test)
+    }
+  }
+}
+# Set the significance level
+alpha = 0.05
+
+# Find pairs with significant p-values in granger_matrix
+granger_pairs = data.frame()
+for (i in rownames(granger_matrix)) {
+  for (j in colnames(granger_matrix)) {
+    if (i != j && granger_matrix[i, j] < alpha) {
+      granger_pairs = rbind(granger_pairs, data.frame(cause = i, effect = j, granger_p_value = granger_matrix[i, j]))
+    }
+  }
+}
+
+# Find pairs with significant p-values in instant_matrix
+instant_pairs = data.frame()
+for (i in rownames(instant_matrix)) {
+  for (j in colnames(instant_matrix)) {
+    if (i != j && instant_matrix[i, j] < alpha) {
+      instant_pairs = rbind(instant_pairs, data.frame(cause = i, effect = j, instantaneous_p_value = instant_matrix[i, j]))
+    }
+  }
+}
+
+
+granger_matrix
+instant_matrix
+granger_pairs
+instant_pairs
+```
+
+STEP 13:TESTING FOR CAUSALITY USING VARIANCE (Test 2 out of 2)
+
+In this step we have used the GRANGER test and Instant test based on Variance. For easily interpreting the results two dataframes of pairs have been made. 
+
+GRANGER BASED ON VARIANCE
+It can be seen that for the Granger Causality test based on variance, has 37 pairs (X causes Y), with significant p values. So observe that returns of a good number of instruments are effecting future returns of other instruments.
+
+INSTANT BASED ON VARIANCE
+But for Instant test based on variance the pairs are 88 out of 100 possibilities. This can be because instant test basically tells that one value of a instrument has immediate effect on the other. This tells that in short terms there are multiple factors which might effect all these instruments similarly although the impact might be very low. 
+
+
+
+```{r}
+#VOLATILITY ARMA +GARCH MODEL FOR APPLE STOCK 
+
+arma.garch.t = ugarchspec(mean.model=list(armaOrder=c(1,0)),variance.model=list(garchOrder=c(1,1)), distribution.model = "std")
+AAPL.garch.t = ugarchfit(data=returns$AAPL.Close,spec=arma.garch.t)
+show(AAPL.garch.t)
+
+```
+STEP 14: TESTING OF VOLATILITY IN APPLE STOCK (1 out of 4 instruments tested)
+
+For the volatility we have are testing 4 out of 10 instruments. One of each type (Tech, Gold, Financial stock, Crypto)
+
+Residual Correlation:
+For the APPLE returns it can be seen that (ar1) is NEGATIVE and INSIGNIFICANT. This shows that there is no correlation in the model residuals. 
+
+Volatility:
+The alpha 1 and beta 1 values are significant and beta1 is 0.83 which is pretty large, so that shows a persistent volatility clustering. 
+
+```{r}
+#VOLATILITY ARMA +GARCH MODEL FOR GOLD ETF 
+
+arma.garch.t = ugarchspec(mean.model=list(armaOrder=c(1,0)),variance.model=list(garchOrder=c(1,1)), distribution.model = "std")
+GLD.garch.t = ugarchfit(data=returns$GLD.Close,spec=arma.garch.t)
+show(GLD.garch.t)
+```
+STEP 15: TESTING OF VOLATILITY IN GOLD ETF (2 out of 4 instruments tested)
+
+Residual Correlation:
+For the GOLD ETF returns it can be seen that (ar1) is NEGATIVE and INSIGNIFICANT. This shows that there is no correlation in the model residuals. 
+
+Volatility:
+The alpha 1 and beta 1 values are significant and beta1 is 0.93 which is pretty large, so that shows a persistent volatility clustering. 
+
+```{r}
+#VOLATILITY ARMA +GARCH MODEL FOR JPM (JP MORGAN STOCK) 
+
+arma.garch.t = ugarchspec(mean.model=list(armaOrder=c(1,0)),variance.model=list(garchOrder=c(1,1)), distribution.model = "std")
+JPM.garch.t = ugarchfit(data=returns$JPM.Close,spec=arma.garch.t)
+show(JPM.garch.t)
+```
+
+
+STEP 16: TESTING OF VOLATILITY IN JP Morgan Stock (3 out of 4 instruments tested)
+
+Residual Correlation:
+For the JP Morgan returns it can be seen that (ar1) is NEGATIVE and INSIGNIFICANT. This shows that there is no correlation in the model residuals. 
+
+Volatility:
+The alpha 1 and beta 1 values are significant and beta1 is 0.81 which is pretty large, so that shows a persistent volatility clustering. 
+
+```{r}
+#VOLATILITY ARMA +GARCH MODEL FOR BTC 
+
+arma.garch.t = ugarchspec(mean.model=list(armaOrder=c(1,0)),variance.model=list(garchOrder=c(1,1)), distribution.model = "std")
+BTC.garch.t = ugarchfit(data=returns$BTC_USD.Close,spec=arma.garch.t)
+show(BTC.garch.t)
+```
+STEP 17: TESTING OF VOLATILITY IN BTC (4 out of 4 instruments tested)
+
+Residual Correlation:
+For the BTC returns it can be seen that (ar1) is NEGATIVE and INSIGNIFICANT. This shows that there is no correlation in the model residuals. 
+
+Volatility:
+The alpha 1 and beta 1 values are significant and beta1 is 0.897 which is pretty large, so that shows a persistent volatility clustering. 
+
+```{r}
+##Assessing the Factorability of the Data
+#Bartlett's Test of Sphericity
+cortest.bartlett(returns)
+```
+STEP 18: CHECK IF THERE IS FACTORABILITY IN DATA (Test 1 out of 2)
+
+The Bartletts test basically check if the data is not an identity matrix and there can be latent factors behind them. 
+
+Null Hypothesis: There are no latent factors and the matrix is an identity matrix
+
+As the p value is 0, it is significant hence the the matrix is not identity matrix and there is some existence of latent variables. 
+
+
+```{r}
+#Kaiser-Meyer-Olkin Test to check factorability
+KMO(returns)
+```
+
+STEP 19: CHECK IF THERE IS FACTORABILITY IN DATA (Test 2 out of 2)
+
+THE KMO test checks the data to see the partial correlation values. It checks if the correlations are not close to zero, which indicates that there is atleast one latent factor. 
+
+Result: The MSA value is the check for this test, as this value is 0.86 which is way higher than the minimum acceptable value of 0.5, this further confirms that there are latent factors. All the instruments individually also have a good value indicating all of them should be considered in the analysis. 
+
+
+```{r}
+###  Statistical Factor Analysis
+
+# Example : Factor analysis of equity funds
+returns[,1:10]
+fa_none = factanal(returns,4,rotation="none") 
+print(fa_none,cutoff=0.1) # By convention, any loading with an absolute value less than the parameter cutoff is not printed, and the default value of cutoff is 0.1
+
+
+```
+STEP 20: STATISTICAL FACTOR MODEL 
+Without Rotation | Cut off for factor loading is set as 0.1
+
+
+This model is used to identify the latent factors that are effecting our instruments. We used an assumption that there are 4 such factors that are effecting our instruments. 
+
+Null Hypothesis: 4 Factor model fits the data
+As the p value is not significant (0.757), we can deduce that the 4 factor model actually fits the data well. Meaning we don't reject the null hypothesis
+
+Results:
+
+Uniqueness: This tells the variance which is not explained by the four factors, we can see that cryptos (Except XRP) and gold have the highest amount of variances not explained. The most explained instruments in this analysis from the four factors are XRP (which in the previous analysis also has been a bit different from other cryptos) and Bank of America corporation (BAC). 
+
+Factor 1: Its an overall index in the same direction, does not tell much.
+
+Factor 2: This explains that there is a certain factor which has  factor loadings above the cut off value for the two main cryptos (BTC & ETH) and all the finance stocks and also the tech stock (APPLE). The factor loading for cryptos are small but all the rest instruments in factor 2 are large. This might show some factor which have strong effect on the US market, as all of these instruments are from US market. 
+
+Factor 3: The considerable loadings above the cut off value are for APPLE and GOLD but the values are small, and the large values are for cryptos (Except XRP) this can be something like interest rates or crytpo related policies. 
+
+Factor 4: It has strong factor loading with APPLE and weak with Gold and Goldman Sachs among the ones that are above cut off value. This factor is a bit hard to comprehend. 
+
+```{r}
+#VARIMAX ROTATION FACTOR MODEL
+fa_vari = factanal(returns,4,rotation="varimax") #factor model with rotation
+print(fa_vari,cutoff=0.1)
+
+```
+
+
+Step 21: STATISTICAL FACTOR MODEL
+With Rotation | CUTOFF = 0.1
+
+The rotation in statistical factor model basically attempts to make each loading small or large so that the variable loads onto few factors. The uniqueness remains the same and also the p value. So the null hypothesis is not rejected and the 4 factor model can explain the variables. 
+
+Results:
+
+Factor 2: It shows strong loadings on finance and tech stock and weak loadings on a few cryptos above the cut off value. This again signals towards something that effects the US market in general. 
+
+Factor 3: No factor 3 has loadings above the cut off value for the three smaller cryptos in our portfolio (BNB, ADA, XRP) and a small loading bove cut off value for apple. This doesn't give us any proper result. 
+
+Factor 4: In the factor analysis without rotation we didn't have any negative loadings, but over here two of the finance stocks have negative loadings. This might be indicating towards a factor which effects financial institutions in the US market such that investors turn towards other stocks or alternatives like crypto. 
+
+
+```{r}
+##Determining the Number of Factors to Extract
+# scree plot
+scree_plot <- scree(returns)
+scree_plot
+#Parallel Analysis
+fa.parallel (returns) #
+```
+STEP 22: Determining the number of factors to extract.
+
+We use the scree plot and parallel analysis on the scree plot to determining the factors that should have been extracted from the factor models. 
+
+RESULT SCREE PLOT: We can see that after the 3rd factor the line becomes like a scree meaning that it straightens up and is no longer like a mountain. The first two factors are large and the third isnt that large but is considerable. Hence, this indicates that we should extract 3 factors. 
+
+RESULT PARALLEL ANALYSIS: In the parallel anlaysis, to decide the factors we have to see the triangles above or on the red dotted lines (Simulated and resampled data). In our plot we can see that 2 factors are way above and the third is some what on the line and fourth is also slightly touching it. It indicates more towards extracting 3 factors and a bit towards 4 factors. Both can be tested. 
+
+```{r}
+#Estimation factor model
+factor.model_1 <- fa(returns, nfactors = 3, fm="ols", max.iter = 100, rotate = "oblimin")
+factor.model_2 <- fa(returns, nfactors = 4, fm="ols", max.iter = 100, rotate = "oblimin")
+
+# make it visual
+fa.diagram(factor.model_1) 
+fa.diagram(factor.model_2) 
+```
+
+STEP 23: ESTIMATION FACTOR MODEL
+
+In this step we use the fa() function in R, to do a factor analysis on our data while keeping the factors as 3 and 4, as found out above, iterations at 100, it is done by means of OLS and we use oblimin rotation (Oblique rotation method) which allows the factors to correlate contrary to Varimax. 
+
+3 Factors:
+When we limit it to three factors, it shows that there are only two factors which actually have an effect. 
+Factor 1 is related to crypto which is understandable as they move similar to each other mostly, whereas the factor 2 has an effect on all US market stocks other than Gold ETF, this shows that there is a certain factor effecting these stocks. 
+
+4 Factors:
+In a 4 factor test, all factors are effecting the instruments except gold and these factors have some relation with each other too. One interesting thing we notice here is that a certain factor (F4) has effect on Apple stock and is also relevant to the Factor F1 and F2, which have prominent effect on cryptos (except XRP) and financial stocks. This has to do with the fact that APPLE is in the tech industry like Crypto and is also on the US market like the financial stocks.
+
+
+```{r}
+# Communality for model with 3 factors
+factor.model_1$communality
+```
+STEP 24: CHECKING EXPLAINED VARIANCE THROUGH COMMUNALITY
+
+WITH 3 Factors model
+
+Communality explains the variance that has been explained by the factors in the model for each instrument. The more the value is closer to 1, it means more variance is explained by the retained factors. 
+
+We can see that in this model variances for financial stocks and cryptos are well explained by the model but APPLE and GOLD not so well. 
+
+```{r}
+# Communality for model with 4 factors
+factor.model_2$communality
+```
+STEP 25: CHECKING EXPLAINED VARIANCE THROUGH COMMUNALITY
+
+WITH 4 Factors model
+
+We can see that in this model variances for financial stocks and cryptos are still well explained and the explained variance for APPLE stock also increases from 0.368 to 0.484. Communality hints that a 4 factor model is actually better.
+
+```{r}
+#Eeigenvalues
+factor.model_1$e.values
+```
+
+```{r}
+#Percentage of Variance Accounted For
+100*factor.model_1$e.values/length(factor.model_1$e.values)
+```
+
+STEP 26: FINDING THE VARIANCE EXPLAINED BY FACTORS BY EIGENVALUES
+
+In this step, using the eigen values which are the measure of explained variance of a variable by the factors we calculate the variance that each factor explains. We then calculate the percentage of variance accounted for. 
+
+We can see that the first 3 factors explain approximately 78% of the variance whereas if we take the first 4 factors it explains approximately 84% of the variance which is a good model. 
+
+```{r}
+#Looking at correlation of Factors with each Instrument (3 factor model)
+print(factor.model_1$Structure, cutoff=0, digits=3)
+```
+STEP 27: CORRELATION OF STOCKS WITH FACTORS (3 factor model)
+
+The above matrix shows the correlation of each instrument with the factors. We can see that the cryptos have a high correlation with factor 1 and the stocks (other than GOLD etf) have a high correlation with Factor 2. The only Factor with which GOLD has some correlation is Factor 3.
+
+```{r}
+#Looking at correlation of Factors with each Instrument (4 factor model)
+print(factor.model_2$Structure, cutoff=0, digits=3)
+```
+
+STEP 28: CORRELATION OF STOCKS WITH FACTORS (4 factor model)
+
+In the model with 4 factors we can see that cryptos have a high correlation with factor 1 and 3 and all other instruments have a low correlation here. But for Factor 2 the financial stocks have a very high correlation and Apple also has a good correlation, this indicates that this factor has huge effect in general on the US stock market. Factor 4 has similar results, the only considerable change is that GOLD also has a positive correlation with factor 4, whereas for Factor 2 it was negative. 
+
+
+```{r}
+#ECONOMIC FACTOR MODEL
+## FACTOR Analysis
+setwd("/Users/hamza/Downloads/Macroeconomic")
+
+DFF.dat = read_xls("DFF.xls")  
+inflationrate.dat = read_xlsx("inflationrate.xlsx") 
+```
+
+STEP 29: SELECTION OF MACRO ECONOMIC FACTORS
+
+For the macroeconomic factor model, DFF (The federal fund interest rate for US) and IR (inflation rate) have been selected. The reason is that these two indicators explain the economical situation. If the interest rate is being increased tremendously this signals towards a low capital availability in the future, which can effect investments. Similarly a high inflation rate signals that the economic condition might be worsening and people might have less funds to invest due to rising prices. 
+
+The data is loaded into the environment in the above code. 
+
+```{r}
+#AGGREGATING DAILY PRICE DATA TO MONTHLY BASIS
+monthly_AAPL.Close <- apply.monthly(AAPL$AAPL.Close, FUN = last)
+monthly_GLD.Close <- apply.monthly(GLD$GLD.Close, FUN = last)
+monthly_BAC.Close <- apply.monthly(BAC$BAC.Close, FUN = last)
+monthly_GS.Close <- apply.monthly(GS$GS.Close, FUN = last)
+monthly_JPM.Close <- apply.monthly(JPM$JPM.Close, FUN = last)
+monthly_BTC_USD.Close <- apply.monthly(BTC_USD$BTC_USD.Close, FUN = last)
+monthly_ETH_USD.Close <- apply.monthly(ETH_USD$ETH_USD.Close, FUN = last)
+monthly_BNB_USD.Close <- apply.monthly(BNB_USD$BNB_USD.Close, FUN = last)
+monthly_XRP_USD.Close <- apply.monthly(XRP_USD$XRP_USD.Close, FUN = last)
+monthly_ADA_USD.Close <- apply.monthly(ADA_USD$ADA_USD.Close, FUN = last)
+
+
+```
+
+STEP 30: Converting closing prices data to monthly basis
+
+As our macroeconomic data is on monthly basis we have aggregated the stock closing prices on monthly basis too. 
+
+```{r}
+#LOG RETURNS OF MONTHLY AGGREGATE CLOSING PRICES
+monthly_AAPL_return <- diff(log(monthly_AAPL.Close))[-1]
+monthly_GLD_return <- diff(log(monthly_GLD.Close))[-1]
+monthly_BAC_return <- diff(log(monthly_BAC.Close))[-1]
+monthly_GS_return <- diff(log(monthly_GS.Close))[-1]
+monthly_JPM_return <- diff(log(monthly_JPM.Close))[-1]
+monthly_BTC_USD_return <- diff(log(monthly_BTC_USD.Close))[-1]
+monthly_ETH_USD_return <- diff(log(monthly_ETH_USD.Close))[-1]
+monthly_BNB_USD_return <- diff(log(monthly_BNB_USD.Close))[-1]
+monthly_XRP_USD_return <- diff(log(monthly_XRP_USD.Close))[-1]
+monthly_ADA_USD_return <- diff(log(monthly_ADA_USD.Close))[-1]
+
+monthly_returns <- data.frame(
+  monthly_AAPL_return,
+  monthly_GLD_return,
+  monthly_BAC_return,
+  monthly_GS_return,
+  monthly_JPM_return,
+  monthly_BTC_USD_return,
+  monthly_ETH_USD_return,
+  monthly_BNB_USD_return,
+  monthly_XRP_USD_return,
+  monthly_ADA_USD_return
+)
+```
+
+STEP 31: LOG RETURNS OF MONTHLY CLOSING PRICES
+
+In the above code log return of monthly closing prices is taken and stored in the dataframe monthly_returns, for easier interpretability of analysis.
+
+```{r}
+#DATA PREPARATION
+monthly_returns_m = as.matrix(monthly_returns)   #  2018-02-28, 2022-12-30
+DFF2 = as.matrix(DFF.dat$DFF[9:72]) #  1977-07-30  to 1987-12-31
+DFF = as.data.frame(diff(DFF2))  # log difference
+names(DFF)[1] ="DFF"
+IR2 = as.matrix(inflationrate.dat$inflationrate[9:72])   #  1977-07-28 to 1987-12-28 
+IR = as.data.frame(diff(IR2)) #calculte log difference 
+names(IR)[1]="IR" #we name the column of the CPI dataframe
+IR_DFF = cbind(IR,DFF)
+
+```
+
+
+STEP 32: DATA PREPARATION
+
+In this steps the difference in rows of both macro factors is taken and only those factors rows are considered which we need for our analysis. A few more rows are selected considering that we will have a few NA values due to the auto regressive model we will do further. 
+
+The columns of both DFF and IR are renamed for ease. 
+
+Both macro factors and the monthly_returns are converted into a matrix form.
+
+Finally, we bind both the macro factors for analysis. 
+
+```{r}
+#autoregressive model - by default selecting the complexity by AIC
+arFit <- ar(cbind(IR,DFF)) 
+res = arFit$resid[5:63,]
+```
+
+STEP 33: RUNNING THE AUTOREGRESSIVE MODEL
+
+The autoregressive model is run on the factors to get residuals to use as factors in the analysis further. 
+
+```{r}
+# REGRESSION ON RETURNS AND RESIDUALS
+lmfit = lm(monthly_returns_m ~ res[,1]+res[,2])
+slmfit = summary(lmfit)
+slmfit
+```
+STEP 34: REGRESSION
+
+We consider y as our log of monthly returns and the residuals for both economic factors as our factors and run a regression. We will visualize the results below.
+
+
+```{r}
+##CREATING BAR CHART FOR R SQUARE AND BETA COEFFICIENT of MODEL VARIABLES
+rsq = rep(0,10) #create a variable rsq with 10 0 values
+
+for (i in 1:10){rsq[i]= slmfit[[i]][[8]]} 
+beta_IR = lmfit$coef[2,] 
+beta_DFF = lmfit$coef[3,]
+par(mfrow=c(1,3)) # building three graphs in a row
+barplot(rsq,horiz=T,names=names(beta_IR),main="R squared") #Creates a bar plot with vertical or horizontal bars.
+barplot(beta_IR,hori=T,main="beta IR") #Creates a bar plot with vertical or horizontal bars.
+barplot(beta_DFF,hori=T,main="beta DFF") #Creates a bar plot with vertical or horizontal bars.
+```
+
+STEP 35: INTERPRETING THE MACROECONOMIC FACTOR MODEL
+
+We can observe that the R values are small for most of the instruments, hence it can be concluded that the model doesnot fit very well. But still with the small values of R square it can be seen that DFF has high beta coefficients of Financial stocks and cryptos, which shows it does have some effect on them. Another interesting observation is the negative beta coefficient of GOLD ETF with Inflation rate. This can be explained by the fact that gold is often used as a hedging tool against inflation. Hence, when inflation rises people tend to buy gold and its price increases. 
+
+```{r}
+##SIMULATION TO PREDICT STOCK & crypto PRICES SETTING CONTROLS
+num_simulations = 1000
+forecast_period = 5 
+time_step_stocks = 1/252
+time_step_crypto = 1/365
+```
+
+STEP 36: SETTING CONTROLS FOR PREDICTING STOCK VALUES USING SIMULATION
+
+In the above code, we have set the number of simulations to be run at 1000, the forecast period is set at 5 meaining that we will get results for the next 5 days of the data. The time_step_stocks is set at 252, considering that stocks are approximately traded for this amount of days in a year, whereas for crypto it is set at 365, as they are traded throughout the year.
+
+```{r}
+#REQUIRED CALCULATIONS FOR THE SIMULATION
+#AAPL
+daily_return_AAPL = mean(returns$AAPL.Close,)
+daily_volatility_AAPL = sd(returns$AAPL.Close)
+current_price_AAPL = tail(close_prices$AAPL.Close, 1)
+
+#GLD
+daily_return_GLD = mean(returns$GLD.Close,)
+daily_volatility_GLD = sd(returns$GLD.Close)
+current_price_GLD = tail(close_prices$GLD.Close, 1)
+
+#BAC
+daily_return_BAC = mean(returns$BAC.Close,)
+daily_volatility_BAC = sd(returns$BAC.Close)
+current_price_BAC = tail(close_prices$BAC.Close, 1)
+
+#GS
+daily_return_GS = mean(returns$GS.Close,)
+daily_volatility_GS = sd(returns$GS.Close)
+current_price_GS = tail(close_prices$GS.Close, 1)
+
+#JPM
+daily_return_JPM = mean(returns$JPM.Close,)
+daily_volatility_JPM = sd(returns$JPM.Close)
+current_price_JPM = tail(close_prices$JPM.Close, 1)
+
+```
+
+```{r}
+##CREATING THE SIMULATION FUNCTION
+  
+simulate_stock_prices_AAPL = function(current_price_AAPL, daily_return_AAPL, daily_volatility_AAPL, time_step_stocks, num_simulations, forecast_period) {
+  random_daily_returns = matrix(rnorm(num_simulations * forecast_period, mean = daily_return_AAPL * time_step_stocks, sd = daily_volatility_AAPL * sqrt(time_step_stocks)), nrow = num_simulations)
+  price_paths = current_price_AAPL * t(apply(1 + random_daily_returns, 1, cumprod))
+  return(price_paths)
+}
+
+# Stock: GLD
+simulate_stock_prices_GLD = function(current_price_GLD, daily_return_GLD, daily_volatility_GLD, time_step_stocks, num_simulations, forecast_period) {
+  random_daily_returns = matrix(rnorm(num_simulations * forecast_period, mean = daily_return_GLD * time_step_stocks, sd = daily_volatility_GLD * sqrt(time_step_stocks)), nrow = num_simulations)
+  price_paths = current_price_GLD * t(apply(1 + random_daily_returns, 1, cumprod))
+  return(price_paths)
+}
+
+# Stock: BAC
+simulate_stock_prices_BAC = function(current_price_BAC, daily_return_BAC, daily_volatility_BAC, time_step_stocks, num_simulations, forecast_period) {
+  random_daily_returns = matrix(rnorm(num_simulations * forecast_period, mean = daily_return_BAC * time_step_stocks, sd = daily_volatility_BAC * sqrt(time_step_stocks)), nrow = num_simulations)
+  price_paths = current_price_BAC * t(apply(1 + random_daily_returns, 1, cumprod))
+  return(price_paths)
+}
+
+# Stock: GS
+simulate_stock_prices_GS = function(current_price_GS, daily_return_GS, daily_volatility_GS, time_step_stocks, num_simulations, forecast_period) {
+  random_daily_returns = matrix(rnorm(num_simulations * forecast_period, mean = daily_return_GS * time_step_stocks, sd = daily_volatility_GS * sqrt(time_step_stocks)), nrow = num_simulations)
+  price_paths = current_price_GS * t(apply(1 + random_daily_returns, 1, cumprod))
+  return(price_paths)
+}
+
+# Stock: JPM
+simulate_stock_prices_JPM = function(current_price_JPM, daily_return_JPM, daily_volatility_JPM, time_step_stocks, num_simulations, forecast_period) {
+  random_daily_returns = matrix(rnorm(num_simulations * forecast_period, mean = daily_return_JPM * time_step_stocks, sd = daily_volatility_JPM * sqrt(time_step_stocks)), nrow = num_simulations)
+  price_paths = current_price_JPM * t(apply(1 + random_daily_returns, 1, cumprod))
+  return(price_paths)
+}
+
+```
+
+
+STEP 37: SETTING THE SIMULATION FUNCTION
+
+In this step the precalculations are done and the simulation function is loaded for all stocks. 
+
+```{r}
+## RUNNING THE SIMULATION FUNCTION FOR ALL STOCKS
+###AAPL
+simulated_prices_AAPL = simulate_stock_prices_AAPL(current_price_AAPL, daily_return_AAPL, daily_volatility_AAPL, time_step_stocks, num_simulations, forecast_period)
+
+###GLD
+simulated_prices_GLD = simulate_stock_prices_GLD(current_price_GLD, daily_return_GLD, daily_volatility_GLD, time_step_stocks, num_simulations, forecast_period)
+
+###BAC
+simulated_prices_BAC = simulate_stock_prices_BAC(current_price_BAC, daily_return_BAC, daily_volatility_BAC, time_step_stocks, num_simulations, forecast_period)
+
+
+###GS
+simulated_prices_GS = simulate_stock_prices_GS(current_price_GS, daily_return_GS, daily_volatility_GS, time_step_stocks, num_simulations, forecast_period)
+
+
+###JPM
+simulated_prices_JPM = simulate_stock_prices_JPM(current_price_JPM, daily_return_JPM, daily_volatility_JPM, time_step_stocks, num_simulations, forecast_period)
+
+###Forecasting the expected stock price for the end of next week
+
+###APL
+expected_future_price_AAPL = mean(simulated_prices_AAPL[, forecast_period])
+
+###GLD
+expected_future_price_GLD = mean(simulated_prices_GLD[, forecast_period])
+
+###BAC
+expected_future_price_BAC = mean(simulated_prices_BAC[, forecast_period])
+
+###GS
+expected_future_price_GS = mean(simulated_prices_GS[, forecast_period])
+
+#JPM
+expected_future_price_JPM = mean(simulated_prices_JPM[, forecast_period])
+
+# Creating a dataframe
+df_prediction_stocks <- data.frame(
+  Traditional_Stocks = c("AAPL", "GLD", "BAC", "GS", "JPM"),
+  Expected_Mean_Price_Stocks = c(expected_future_price_AAPL, expected_future_price_GLD, expected_future_price_BAC, expected_future_price_GS, expected_future_price_JPM)
+)
+
+# Printing the dataframe
+print(df_prediction_stocks)
+
+```
+
+
+STEP 38: RUNNING THE SIMULATION AND PRINTING RESULTS
+
+In this step, the simulation function is run for all stocks and the results are printed. The mean expected price of the 5 days forecasted ahead of the sample is given in the above dataframe. 
+
+
+```{r}
+#REQUIRED CALCULATIONS FOR THE SIMULATION
+# BTC_USD
+daily_return_BTC_USD = mean(returns$BTC_USD.Close,)
+daily_volatility_BTC_USD = sd(returns$BTC_USD.Close)
+current_price_BTC_USD = tail(close_prices$BTC_USD.Close, 1)
+
+# ETH_USD
+daily_return_ETH_USD = mean(returns$ETH_USD.Close,)
+daily_volatility_ETH_USD = sd(returns$ETH_USD.Close)
+current_price_ETH_USD = tail(close_prices$ETH_USD.Close, 1)
+
+# BNB_USD
+daily_return_BNB_USD = mean(returns$BNB_USD.Close,)
+daily_volatility_BNB_USD = sd(returns$BNB_USD.Close)
+current_price_BNB_USD = tail(close_prices$BNB_USD.Close, 1)
+
+# XRP_USD
+daily_return_XRP_USD = mean(returns$XRP_USD.Close,)
+daily_volatility_XRP_USD = sd(returns$XRP_USD.Close)
+current_price_XRP_USD = tail(close_prices$XRP_USD.Close, 1)
+
+# ADA_USD
+daily_return_ADA_USD = mean(returns$ADA_USD.Close,)
+daily_volatility_ADA_USD = sd(returns$ADA_USD.Close)
+current_price_ADA_USD = tail(close_prices$ADA_USD.Close, 1)
+```
+
+```{r}
+###Creating the simulation Function for cryptos
+
+simulate_cryptocurrency_prices_BTC_USD = function(current_price_BTC_USD, daily_return_BTC_USD, daily_volatility_BTC_USD, time_step_crypto, num_simulations, forecast_period) {
+  random_daily_returns = matrix(rnorm(num_simulations * forecast_period, mean = daily_return_BTC_USD * time_step_crypto, sd = daily_volatility_BTC_USD * sqrt(time_step_crypto)), nrow = num_simulations)
+  price_paths = current_price_BTC_USD * t(apply(1 + random_daily_returns, 1, cumprod))
+  return(price_paths)
+}
+
+# Cryptocurrency: ETH_USD
+simulate_cryptocurrency_prices_ETH_USD = function(current_price_ETH_USD, daily_return_ETH_USD, daily_volatility_ETH_USD, time_step_crypto, num_simulations, forecast_period) {
+  random_daily_returns = matrix(rnorm(num_simulations * forecast_period, mean = daily_return_ETH_USD * time_step_crypto, sd = daily_volatility_ETH_USD * sqrt(time_step_crypto)), nrow = num_simulations)
+  price_paths = current_price_ETH_USD * t(apply(1 + random_daily_returns, 1, cumprod))
+  return(price_paths)
+}
+
+# Cryptocurrency: BNB_USD
+simulate_cryptocurrency_prices_BNB_USD = function(current_price_BNB_USD, daily_return_BNB_USD, daily_volatility_BNB_USD, time_step_crypto, num_simulations, forecast_period) {
+  random_daily_returns = matrix(rnorm(num_simulations * forecast_period, mean = daily_return_BNB_USD * time_step_crypto, sd = daily_volatility_BNB_USD * sqrt(time_step_crypto)), nrow = num_simulations)
+  price_paths = current_price_BNB_USD * t(apply(1 + random_daily_returns, 1, cumprod))
+  return(price_paths)
+}
+
+# Cryptocurrency: XRP_USD
+simulate_cryptocurrency_prices_XRP_USD = function(current_price_XRP_USD, daily_return_XRP_USD, daily_volatility_XRP_USD, time_step_crypto, num_simulations, forecast_period) {
+  random_daily_returns = matrix(rnorm(num_simulations * forecast_period, mean = daily_return_XRP_USD * time_step_crypto, sd = daily_volatility_XRP_USD * sqrt(time_step_crypto)), nrow = num_simulations)
+  price_paths = current_price_XRP_USD * t(apply(1 + random_daily_returns, 1, cumprod))
+  return(price_paths)
+}
+
+# Cryptocurrency: ADA_USD
+simulate_cryptocurrency_prices_ADA_USD = function(current_price_ADA_USD, daily_return_ADA_USD, daily_volatility_ADA_USD, time_step_crypto, num_simulations, forecast_period) {
+  random_daily_returns = matrix(rnorm(num_simulations * forecast_period, mean = daily_return_ADA_USD * time_step_crypto, sd = daily_volatility_ADA_USD * sqrt(time_step_crypto)), nrow = num_simulations)
+  price_paths = current_price_ADA_USD * t(apply(1 + random_daily_returns, 1, cumprod))
+  return(price_paths)
+}
+
+```
+
+STEP 39: SETTING THE SIMULATION FUNCTION
+
+In this step the precalculations are done and the simulation function is loaded for all cryptos. 
+
+```{r}
+###RUNNING THE SIMULATION FOR ALL CRYPTOS
+
+### BTC_USD
+simulated_prices_BTC_USD = simulate_cryptocurrency_prices_BTC_USD(current_price_BTC_USD, daily_return_BTC_USD, daily_volatility_BTC_USD, time_step_crypto, num_simulations, forecast_period)
+
+### ETH_USD
+simulated_prices_ETH_USD = simulate_cryptocurrency_prices_ETH_USD(current_price_ETH_USD, daily_return_ETH_USD, daily_volatility_ETH_USD, time_step_crypto, num_simulations, forecast_period)
+
+### BNB_USD
+simulated_prices_BNB_USD = simulate_cryptocurrency_prices_BNB_USD(current_price_BNB_USD, daily_return_BNB_USD, daily_volatility_BNB_USD, time_step_crypto, num_simulations, forecast_period)
+
+### XRP_USD
+simulated_prices_XRP_USD = simulate_cryptocurrency_prices_XRP_USD(current_price_XRP_USD, daily_return_XRP_USD, daily_volatility_XRP_USD, time_step_crypto, num_simulations, forecast_period)
+
+### ADA_USD
+simulated_prices_ADA_USD = simulate_cryptocurrency_prices_ADA_USD(current_price_ADA_USD, daily_return_ADA_USD, daily_volatility_ADA_USD, time_step_crypto, num_simulations, forecast_period)
+
+### Forecasting the expected cryptocurrency price for the end of next week
+
+### BTC_USD
+expected_future_price_BTC_USD = mean(simulated_prices_BTC_USD[, forecast_period])
+
+### ETH_USD
+expected_future_price_ETH_USD = mean(simulated_prices_ETH_USD[, forecast_period])
+
+### BNB_USD
+expected_future_price_BNB_USD = mean(simulated_prices_BNB_USD[, forecast_period])
+
+### XRP_USD
+expected_future_price_XRP_USD = mean(simulated_prices_XRP_USD[, forecast_period])
+
+### ADA_USD
+expected_future_price_ADA_USD = mean(simulated_prices_ADA_USD[, forecast_period])
+
+# Creating a dataframe
+df_prediction_cryptos <- data.frame(
+  Cryptocurrency = c("BTC_USD", "ETH_USD", "BNB_USD", "XRP_USD", "ADA_USD"),
+  Expected_Mean_Price_Crypto = c(expected_future_price_BTC_USD, expected_future_price_ETH_USD, expected_future_price_BNB_USD, expected_future_price_XRP_USD, expected_future_price_ADA_USD)
+)
+options(scipen = 999)
+# Printing the dataframe
+print(df_prediction_cryptos)
+
+
+```
+STEP 40: RUNNING THE SIMULATION AND PRINTING RESULTS
+
+In this step, the simulation function is run for all cryptos and the results are printed. The mean expected price of the 5 days forecasted ahead of the sample is given in the above dataframe. 
+
+
+
+STEP 41: CONCLUSION
+
+After all the above analysis we can conclude a number of following points.
+
+
+1. All our data is not normal
+
+2. Cryptos have a high correlation with each other and moderately correlated with Apple stock.
+
+3. All financial stocks are highly correlated with each other.
+
+4. Gold is not much correlated with any of them.
+
+5. Among cryptos XRP exhibits different behaviour at certain times. 
+
+6. We can find causality among a number of instrument pairs, and instant causality based on variance in approximately all the pairs.
+
+7. The statistical factor model indicates 2 strong factors and one less comprehend able factor. 
+
+8. The selected macroeconomic factors model based on FED FUND INTEREST RATE (DFF) & Inflation Rate (IR), is not a very good model as R square values are less. 
+
+

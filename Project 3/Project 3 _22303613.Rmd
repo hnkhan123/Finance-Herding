@@ -1,0 +1,466 @@
+---
+title: "Herding"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r message=FALSE, warning=FALSE}
+rm(list = ls(all=TRUE))
+
+```
+
+Step 1: 
+Clearing Environment. 
+
+```{r message=FALSE, warning=FALSE}
+library (xts)
+library (zoo)
+library (PerformanceAnalytics)
+require (sandwich)
+require(lmtest)
+library(dplyr)
+library(tidyquant)
+library(quantmod)
+library (quantreg)
+library(pastecs)
+require (tvReg)
+library (brms)
+library (MSwM)
+library (quantreg)
+
+```
+
+Step 2: 
+Loading all the required libraries
+
+```{r}
+options("getSymbols.warning4.0"=TRUE)
+options("getSymbols.yahoo.warning"=TRUE)
+getSymbols(c("AAPL","MSFT","GOOG","AMZN","NVDA","META","TSLA","AVGO","ORCL","CRM", "CSCO","ADBE","AMD", "TXN", "NFLX"), from = '2015-01-01',
+           to = "2023-01-01",warnings = FALSE,
+           auto.assign = TRUE, ) 
+
+stock_names <- c("Apple Inc.", "Microsoft Corporation", "Alphabet Inc.", "Amazon.com, Inc.", "NVIDIA Corporation", "Meta Platforms, Inc.", "Tesla, Inc.", "Broadcom Inc.", "Oracle Corporation", "Salesforce.com, Inc.", "Cisco Systems, Inc.", "Adobe Inc.", "Advanced Micro Devices, Inc.", "Texas Instruments Incorporated", "Netflix, Inc.")
+```
+
+
+Step 3:
+Market of Interest: Tech Market in US
+
+Reason: As we are trying to measure herding over here and it is known that herding can be due to many reasons. A few are listed below
+
+1. Short trading horizons (Froot, Scharfstein, and Stein (1992))
+2. Low ability of Traders (Graham (1999))
+3. Irrationality
+4. Arbitragers
+
+Now retail investors (Individuals doing trading themself) have all the above points relevant to them and hence they are more prone to herding behaviour. The reason to give this explanation was that the percentage of these retail investors is on the rise in recent years and their favourite industry is the Tech industry. (https://www.nasdaq.com/articles/the-10-most-popular-recurring-investments-of-retail-investors) 
+
+Hence, the 15 stocks with the highest market cap in tech industry in US were selected.
+
+The code above gets the data for the stocks from Yahoo finance from 2015-01-01 to 2023-01-01.
+```{r}
+# Create data frame with daily closing prices
+stock_close <- data.frame(AAPL$AAPL.Close, MSFT$MSFT.Close, GOOG$GOOG.Close, AMZN$AMZN.Close, NVDA$NVDA.Close, META$META.Close, TSLA$TSLA.Close, AVGO$AVGO.Close, ORCL$ORCL.Close, CRM$CRM.Close, CSCO$CSCO.Close, ADBE$ADBE.Close, AMD$AMD.Close, TXN$TXN.Close, NFLX$NFLX.Close)
+
+# Convert data frame to xts object
+stock_xts <- xts(stock_close, order.by = as.Date(row.names(stock_close)))
+```
+
+Step 4:
+The close prices of all the stocks are stored in a dataframe named stock_close and then it is converted into a timeseries object. 
+
+```{r}
+
+##chart series
+chart_Series(stock_xts$AAPL.Close, name = stock_names[1])
+chart_Series(stock_xts$MSFT.Close, name = stock_names[2])
+chart_Series(stock_xts$GOOG.Close, name = stock_names[3])
+chart_Series(stock_xts$AMZN.Close, name = stock_names[4])
+chart_Series(stock_xts$NVDA.Close, name = stock_names[5])
+chart_Series(stock_xts$META.Close, name = stock_names[6])
+chart_Series(stock_xts$TSLA.Close, name = stock_names[7])
+chart_Series(stock_xts$AVGO.Close, name = stock_names[8])
+chart_Series(stock_xts$ORCL.Close, name = stock_names[9])
+chart_Series(stock_xts$CRM.Close, name = stock_names[10])
+chart_Series(stock_xts$CSCO.Close, name = stock_names[11])
+chart_Series(stock_xts$ADBE.Close, name = stock_names[12])
+chart_Series(stock_xts$AMD.Close, name = stock_names[13])
+chart_Series(stock_xts$TXN.Close, name = stock_names[14])
+chart_Series(stock_xts$NFLX.Close, name = stock_names[15])
+
+```
+
+Step 5:
+The code below gives the price charts of all the stocks. If we take a glimpse of the charts we can observe that all individually they have different movements but overall the trend has been similar. This is due to the fact that they are from the same industry and secondly some external factors like:
+
+1. US trade war with China (2018)
+2. Russian Invasion of Ukraine
+3. High Interest Rates
+```{r}
+##TAKING LOG RETURNS
+return = Return.calculate( stock_xts , method = "log") # automatically calculate return
+return
+```
+
+Step 6:
+Then we calculate the log returns for easier calculation and interpretability. 
+
+```{r}
+descriptive.stat.return = stat.desc(return) # descriptive statistics
+descriptive.stat.return
+```
+
+Step 7:
+Descriptive Statistics
+
+```{r}
+# a function to create CSAD and Rm
+exchange.herd = function(return) 
+{
+  n=ncol(return)
+  Rm = rowMeans(return)
+  temp_dif =abs(return-Rm)
+  temp_sum = rowSums(temp_dif)
+  CSAD = temp_sum / ncol(return)
+  CSAD = cbind (CSAD, Rm)
+  return (CSAD)
+}
+```
+
+
+Step 8:
+Calculating CSAD and Rm
+
+A function is developed which helps us to calculate the CSAD and Rm. Where CSAD is the cross sectional absolute deviation of the stock relative to the equally weighted market portfolio and Rm is the market return. 
+
+Through the relationship between CSAD and Rm, we can calculate herding.  
+```{r}
+###CALLING THE FUNCTION
+f = exchange.herd(return) # calling the function "exchange.herd" that calculates CSAD and Rm
+head (f)
+```
+
+Step 9:
+Applying the function created above on return (log returns of stocks)
+
+
+```{r}
+##DATA PROCESSING
+CSAD.df = fortify.zoo(f) 
+CSAD.df$Rm2 = CSAD.df$Rm^2
+```
+
+
+Step 10:
+In this step, f (Zoo object which has the CSAD and Rm values), is converted into a dataframe.
+
+Secondly in the newly created dataframe CSAD.df, another column Rm2 is added which is the square of Rm (market returns)
+```{r}
+## ADDING UP/DOWN days BINARY COLUMN
+CSAD.df$D_up <- ifelse(CSAD.df$Rm > 0, 1, 0)
+CSAD.df = CSAD.df[-c(1),] # removing the first row with NAs
+head (CSAD.df) 
+tail (CSAD.df) 
+```
+
+
+Step 11:
+In this step, firstly another column D_up is added in the CSAD.df dataframe, which has a value of 1 when Rm > 0 otherwise it has a value of 0. This is done for the calculations of herding in Up/Down days. 
+
+Then we remove the first row from CSAD.df, as it had NA values because of the log transformation of data that we did above. 
+```{r}
+##DATA PROCESSING
+dates <- seq(as.Date("2015-01-01"), by = "day", length.out = nrow(CSAD.df))
+rownames(CSAD.df) <- dates
+CSAD.df <-CSAD.df[,-1]
+CSAD.df
+```
+
+Step 12:
+The above code is simply to get data in the form we want for the further process. It simply adds the dates as index and removes the numerical index which was appearing in the data frame CSAD.df.
+```{r}
+##DEFINING VARIABLES FOR ALL DAYS HERDING
+y = CSAD.df$CSAD  
+x1 = abs (CSAD.df$Rm)
+x2 = CSAD.df$Rm2
+```
+
+Step 13:
+DEFINING VARIABLES FOR (Unconditional) ALL DAYS HERDING  ANALYSIS
+
+In this part, we have defined y as CSAD and x1 and x2 as per the equation for the overall assessment of herding in data. 
+x1 = absolute of market return
+x2 = Rm2 (Square of market return)
+```{r}
+### SETTING VARIABLES FOR UP/DOWN DAYS
+y_ud = CSAD.df$CSAD  
+x1_ud = abs(CSAD.df$Rm)*CSAD.df$D_up
+x2_ud = abs(CSAD.df$Rm)*(1-CSAD.df$D_up)
+x3_ud = CSAD.df$Rm2*CSAD.df$D_up
+x4_ud = CSAD.df$Rm2*(1-CSAD.df$D_up)
+```
+
+
+Step 14:
+
+Defining Variables For (Conditional) UP/DOWN DAYS DATA ANALYSIS
+
+This step is done to create variables as per the UP/DOWN market days herding analysis equation. y_ud is kept as CSAD.
+
+x1_ud = absolute of Rm * D_up
+x2_ud = absolute of Rm * (1-D_up)
+x3_ud = Rm2 * D_up
+x4_ud = Rm2 * (1-D_up)
+
+where, Rm2 is square of market return (Rm) and D_up are binary numbers explaining if Rm was greater than 0 or not. 
+```{r}
+#LINEAR REGRESSION MODEL FOR ALL DAYS
+linearMod <- lm(y~x1+x2)  # build linear regression model on full data
+print(linearMod)
+summary(linearMod)
+```
+
+Step 15:
+
+LINEAR MODEL FOR ALL DAYS
+
+It can be seen in the above Linear Regression analysis that the p value is significant for both x1 and x2 are both significant. 
+
+Over here we use the linear regression model to assess herding. Although the very significant positive value of x1 hints towards no herding, but the x2 which is also significant according to 95% confidence interval (Which is also strong) hints towards unconditional herding. 
+
+The p-value is more significant for x1 but x2 is also significant and the coefficient is more negative (-0.5) as compared to x2 (0.23). This gives a mixed result, hence more tests can be done. 
+
+
+```{r}
+#Newey-West Heteroscedasticity and Autocorrelation consistent (HAC) estimators FOR ALL DAYS
+coeftest(linearMod,vcov=NeweyWest(linearMod,verbose=T))
+```
+
+Step 16:
+
+NEWEY-WEST REGRESSION FOR ALL DAYS.
+
+This tests with an assumption of heteroscedasticity and autocorrelation in the data. It uses linear regression model but is a bit different from it. 
+
+Result: The result is almost the same as the Linear regression, but the significance of p value of x2 has increase a bit, increasing the possibility of herding to be present. 
+
+```{r}
+##TIME VARYING MODEL of Regression FOR ALL DAYS
+tvlm.fit = tvLM(y~x1+x2, bw = NULL  ) 
+head (tvlm.fit$coefficients)
+
+plot(tvlm.fit$coefficients[,1], type="l", ylim=c(-6, 10), 
+     xlab="Index", ylab="Coefficient Value")
+lines(tvlm.fit$coefficients[,2], type="l", col="red")
+lines(tvlm.fit$coefficients[,3], type="l", col="blue")
+legend("topleft", legend=c("intercept", "x1", "x2"), 
+       col=c("black", "red", "blue"), lty=1)
+```
+Step 17:
+
+TIME VARYING REGRESSION FOR ALL DAYS
+
+This model basically explains the herding period over time. 
+
+On the y-axis
+Index 0 over here is our starting date 2015-01-02. Each unit in index represents a day. The last value on the y-axis is the last date till which the data is present (2023-01-01).
+
+Results: So we can see that strong herding behaviour is present in the between the first quarter of 2015 and second to third quarter of 2016. (Index 400 to 600)
+
+
+
+
+
+```{r}
+## COMPARING HERDING ON HIGH AND LOW VOLATILITY DAYS
+chart_Series(stock_xts$AAPL.Close, name = stock_names[1])
+chart_Series(stock_xts$MSFT.Close, name = stock_names[2])
+chart_Series(stock_xts$GOOG.Close, name = stock_names[3])
+chart_Series(stock_xts$AMZN.Close, name = stock_names[4])
+chart_Series(stock_xts$NVDA.Close, name = stock_names[5])
+```
+
+STEP 18: COMPARING HERDING RESULTS WITH HIGH/ LOW VOLATILITY DAYS
+
+To see if HIGH VOLATILITY or LOW VOLATILITY in the market is more prone to herding, we have plotted 5 of the stocks out of the 15 we have in this project to see the high and low volatility zones. It can be seen that overall the movement of all the stock prices is similar.
+
+Now lets compare volatility and Herding
+
+As given in the Time varying analysis above we have herding in the first quarter of 2015 and second to third quarter of 2016. If we see the prices on the above charts we can see that these are periods of very low volatility. In the high periods we don't observe a strong herding  behaviour as per the Time Varying Regression.
+
+Result: Hence, we can conclude that for our selected stocks, Herding behaviours are strong in a market which low on volatility. 
+```{r}
+###BAYESIAN MODEL FOR ALL DAYS
+hourly = cbind(y, x1, x2)
+model = brm(formula = y ~ x1+x2, 
+            data    = hourly,
+            seed    = 123)
+summary(model)
+```
+
+
+Step 19:
+
+BAYESIAN MODEL FOR ALL DAYS
+
+It can be seen in the Bayesian model that the coefficient for x1 and x2 has the same sign and magnitude as the above models. The rhat value of 1 indicates the algorithm is converged. 
+
+```{r}
+### MARKOV-REGIME SWITCHING MODEL FOR ALL DAYS
+nstates <- 2 # a number of states
+msEuro = msmFit(linearMod, k = nstates, sw = rep(TRUE, 4)) # estimation; linearMod is an object from a linear estimation
+summary(msEuro) #show the 
+plotProb(msEuro, which = 1) # create the plot
+```
+
+Step 20:
+MARKOW - REGIME SWITCHING MODEL FOR ALL DAYS
+
+This model uses an Expectation Maximization algorithm, it allows changes in behaviour of variables on the basis of some regimes. 
+Results:
+x2 is negative and significant in both the Regimes, with a 99% confidence interval in Regime 1 and 95% confidence interval in Regime 2. This shows a very strong herding behaviour.
+
+In the transition probabilities it can be observed that Regime 1 is more persistent in shifting to another regime with a probability of 87.6% as compared to the probability of 66.24% for Regime 2. These transition probabilities for a regime basically tell us the probability of the state of the Regime to changing to some other state. These regimes can basically be depicting high volaitility/low volatility or bearish or bullish markets.
+
+
+```{r}
+##QUANTILE ANALYSIS FOR ALL DAYS
+taus<-seq(from = .1, to = .9, by = .1) 
+coef0 <- rq( y ~ x1+x2, tau=taus)
+summary (coef0)
+coef0
+
+plot(coef0, type ="l")
+```
+
+Step 21:
+
+Quantile Regression Analysis for All Days
+
+If we analyse the significant x2 values in the quantiles, we observe a stronger herding behaviour in the higher quantiles of return variation, specifically 0.9. 
+
+
+```{r}
+##LINEAR REGRESSION ANALYSIS FOR UP/DOWN DAYS
+linearMod_ud <- lm(y_ud~x1_ud+x2_ud+x3_ud+x4_ud)  # build linear regression model on full data
+print(linearMod_ud)
+summary(linearMod_ud)
+```
+
+Step 22:
+
+LINEAR MODEL FOR UP/DOWN DAYS.
+
+Over here we can see that the x3 is not significant and x4 is significant with 90% confidence interval and the coefficient is negative (-0.512).
+
+This means:
+Herding on UP market days on average is not present, but Herding on Down market days on average is present. In simple, words people tend to herd and follow others more when the market is diving down.
+
+
+```{r}
+#Up/Down Newey-West Heteroscedasticity and Autocorrelation consistent (HAC) estimators FOR UP/DOWN DAYS
+coeftest(linearMod_ud,vcov=NeweyWest(linearMod_ud,verbose=T))
+```
+
+
+Step 23:
+NEWEY-WEST REGRESSION FOR UP/DOWN Days.
+
+This tests with an assumption of heteroscedasticity and autocorrelation in the data. It uses linear regression model but is a bit different from it. 
+
+Result: The result is almost the same as the Linear regression, but the significance of p value of x4 has increase a bit, showing higher probability of herding on down days. 
+
+```{r}
+# Up/Down estimate TV Linear Regression
+tvlm.fit_ud = tvLM(y_ud~x1_ud+x2_ud+x3_ud+x4_ud, bw = NULL  ) 
+head (tvlm.fit_ud$coefficients)
+
+plot(tvlm.fit_ud$coefficients[,1], type="l", ylim=c(-6, 10), 
+     xlab="Index", ylab="Coefficient Value")
+lines(tvlm.fit_ud$coefficients[,2], type="l", col="red")
+lines(tvlm.fit_ud$coefficients[,3], type="l", col="blue")
+lines(tvlm.fit_ud$coefficients[,4], type="l", col="green")
+lines(tvlm.fit_ud$coefficients[,5], type="l", col="orange")
+legend("topleft", legend=c("intercept", "x1_ud", "x2_ud","x3_ud","x4_ud"), 
+       col=c("black", "red", "blue","green","orange"), lty=1,x.intersp=1, y.intersp=1, bty="n", ncol=3, cex=0.8)
+
+```
+
+Step 24:
+TIME VARYING REGRESSION FOR UP/DOWN Days
+
+This model basically explains the herding period over time. 
+
+On the y-axis
+Index 0 over here is our starting date 2015-01-02. Each unit in index represents a day. The last value on the y-axis is the last date till which the data is present (2023-01-01).
+
+Results: We can observe that initially in the early months of 2015 (Index 0-100), herding in Up days dominates as the x3 is more negative, but first quarter of 2016 (Index 400), things start to change and the herding in Down days dominates as x4 becomes more negative. 
+
+```{r}
+# Up/Down Bayesian models
+hourly_ud = cbind(y_ud, x1_ud, x2_ud,x3_ud,x4_ud)
+model_ud = brm(formula = y_ud ~ x1_ud+x2_ud+x3_ud+x4_ud, 
+            data    = hourly_ud,
+            seed    = 123)
+summary(model_ud)
+
+```
+
+Step 25:
+
+BAYESIAN MODEL FOR UP/DOWN DAYS
+
+The magnitude of the coefficient is approximately the same as for the regression models, hence it just strengthens the conclusion that the herding is strong on Down days. The rhat value of 1 indicates the algorithm is converged. 
+
+```{r}
+##MARKOV REGIME SWITCHING MODEL FOR UP/DOWN DAYS
+nstates <- 2 # a number of states
+msEuro_ud = msmFit(linearMod_ud, k = nstates, sw = rep(TRUE, 6)) # estimation; linearMod is an object from a linear estimation
+summary(msEuro_ud) #show the 
+plotProb(msEuro_ud, which = 1) # create the plot
+```
+
+Step 26:
+MARKOW- REGIME SWITCHING MODEL FOR UP/DOWN DAYS
+
+In the regime 1, the x4 is has twice as magnitude as x3 and is more significant, hence it hints also at strong herding on the Down days. 
+
+In the regime 2, the significant levels are the same and x3 has a negative coefficients, so it shows that when the market is in Regime 2 situation, it has  herding on the UP Days. 
+
+The transition probabilities show that Regime 2 has a higher probability of transitioning to other state/regime (86.9%) as compared to Regime 1 which has a transition probability of (64.4%)
+
+```{r}
+#UP/Down Quantile regression
+taus<-seq(from = .1, to = .9, by = .1) 
+coef0_ud <- rq(y_ud ~ x1_ud+x2_ud+x3_ud+x4_ud, tau=taus)
+summary (coef0_ud)
+plot(coef0_ud, type = "l")
+```
+
+
+Step 27:
+
+QUANTILE REGRESSION FOR UP/DOWN DAYS
+
+If we focus on the significant values of x3 and x4 over here, most of the values are insignificant. The only significant x value is x3 when tau is 0.7, which also is positive showing no signs of herding in Up days. 
+
+But if we just focus on the coefficients and the plots we can see that the coefficients of x4 are negative for tau 0.6 to 0.9, indicating some herding on DOWN DAYS. 
+
+Similarly in the first quantile although the p values are not signficant but coefficients are strongly negative which might indicate a possibility of herding in both Up and Down days. 
+
+
+
+STEP 28: CONCLUSION
+
+1. For LM,Newey West, BAYESIAN model for herding on normal days we got mixed results with the coefficient x1 being positive and  more significant and indicating no herding whereas the x2 coefficient was negative with more magniture of coefficient but the significance was less. 
+
+2. For UP/DOWN days we have seen that there are indications of herding in Down market days as compared to Up days. 
+
+3. Quantile results in both types mostly have insignificant p values. 
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
